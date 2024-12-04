@@ -1,59 +1,24 @@
+# Use Ubuntu as base image
+FROM ubuntu:22.04
 
-FROM eclipse-temurin:21-jdk-jammy as deps
+# Install OpenJDK 21
+RUN apt-get update && \
+    apt-get install -y openjdk-21-jdk && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-WORKDIR /build
+# Set Java environment variables
+ENV JAVA_HOME /usr/lib/jvm/java-21-openjdk-amd64
+ENV PATH $PATH:$JAVA_HOME/bin
 
+# Create app directory
+WORKDIR /app
 
-COPY --chmod=0755 mvnw mvnw
-COPY .mvn/ .mvn/
+# Copy the JAR file into the container
+COPY target/*.jar app.jar
 
-
-RUN --mount=type=bind,source=pom.xml,target=pom.xml \
-    --mount=type=cache,target=/root/.m2 ./mvnw dependency:go-offline -DskipTests
-
-################################################################################
-
-FROM deps as package
-
-WORKDIR /build
-
-COPY ./src src/
-RUN --mount=type=bind,source=pom.xml,target=pom.xml \
-    --mount=type=cache,target=/root/.m2 \
-    ./mvnw package -DskipTests && \
-    mv target/$(./mvnw help:evaluate -Dexpression=project.artifactId -q -DforceStdout)-$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout).jar target/app.jar
-
-################################################################################
-
-
-FROM package as extract
-
-WORKDIR /build
-
-RUN java -Djarmode=layertools -jar target/app.jar extract --destination target/extracted
-
-################################################################################
-
-
-FROM eclipse-temurin:21-jre-jammy AS final
-
-ARG UID=10001
-RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "/nonexistent" \
-    --shell "/sbin/nologin" \
-    --no-create-home \
-    --uid "${UID}" \
-    appuser
-USER appuser
-
-
-COPY --from=extract build/target/extracted/dependencies/ ./
-COPY --from=extract build/target/extracted/spring-boot-loader/ ./
-COPY --from=extract build/target/extracted/snapshot-dependencies/ ./
-COPY --from=extract build/target/extracted/application/ ./
-
+# Expose the port your app runs on (typically 8080 for Spring Boot)
 EXPOSE 8080
 
-ENTRYPOINT [ "java", "org.springframework.boot.loader.launch.JarLauncher" ]
+# Command to run the application
+ENTRYPOINT ["java", "-jar", "app.jar"]

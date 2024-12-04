@@ -14,8 +14,17 @@ ENV PATH $PATH:$JAVA_HOME/bin
 # Create app directory
 WORKDIR /app
 
-# Copy the JAR file into the container
-COPY target/*.jar app.jar
+# Build stage
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /build
+# Copy pom.xml and src
+COPY pom.xml .
+COPY src ./src
+# Build the application
+RUN mvn clean package -DskipTests
+
+# Update the COPY command to use the built JAR from build stage
+COPY --from=build /build/target/*.jar app.jar
 
 # Expose the port your app runs on (typically 8080 for Spring Boot)
 EXPOSE 8080
